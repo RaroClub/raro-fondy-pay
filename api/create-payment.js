@@ -1,19 +1,19 @@
-import crypto from "crypto";
+const crypto = require('crypto');
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   const merchant_id = process.env.FONDY_MERCHANT_ID;
   const secret_key = process.env.FONDY_SECRET_KEY;
 
   const { amount, currency, order_name } = req.query;
 
   if (!amount || !currency) {
-    return res.status(400).send("Missing required parameters: amount, currency");
+    return res.status(400).send('Missing required parameters: amount, currency');
   }
 
-  const order_id = "raro_" + Date.now();
+  const order_id = 'raro_' + Date.now();
   const order_desc = order_name
-    ? "Oplata zamovlennya " + decodeURIComponent(order_name)
-    : "Oplata zamovlennya";
+    ? 'Oplata zamovlennya ' + decodeURIComponent(order_name)
+    : 'Oplata zamovlennya';
 
   const params = {
     amount: String(amount),
@@ -24,20 +24,17 @@ export default async function handler(req, res) {
   };
 
   const sortedKeys = Object.keys(params).sort();
-  const signatureString = secret_key + "|" + sortedKeys.map((k) => params[k]).join("|");
-  const signature = crypto.createHash("sha1").update(signatureString).digest("hex");
+  const signatureString = secret_key + '|' + sortedKeys.map((k) => params[k]).join('|');
+  const signature = crypto.createHash('sha1').update(signatureString).digest('hex');
 
   const requestBody = {
-    request: {
-      ...params,
-      signature,
-    },
+    request: { ...params, signature },
   };
 
   try {
-    const fondyResponse = await fetch("https://pay.fondy.eu/api/checkout/url/", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+    const fondyResponse = await fetch('https://pay.fondy.eu/api/checkout/url/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
     });
 
@@ -48,10 +45,10 @@ export default async function handler(req, res) {
     } else {
       const errMsg = fondyData.response
         ? fondyData.response.error_message || JSON.stringify(fondyData.response)
-        : "Unknown Fondy error";
-      return res.status(500).send("Fondy error: " + errMsg);
+        : 'Unknown Fondy error';
+      return res.status(500).send('Fondy error: ' + errMsg);
     }
   } catch (error) {
-    return res.status(500).send("Server error: " + error.message);
+    return res.status(500).send('Server error: ' + error.message);
   }
-}
+};
