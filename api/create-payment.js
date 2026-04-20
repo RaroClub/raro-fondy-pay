@@ -6,8 +6,15 @@ module.exports = async function handler(req, res) {
 
   const { amount, currency, order_name } = req.query;
 
-  if (!amount || !currency) {
-    return res.status(400).send('Missing required parameters: amount, currency');
+  if (!amount) {
+    return res.status(400).send('Missing required parameter: amount');
+  }
+
+  const amountInMinorUnits = String(Math.round(parseFloat(amount) * 100));
+
+  let currencyCode = String(currency || '');
+  if (!currencyCode || currencyCode.includes('object') || currencyCode.length !== 3) {
+    currencyCode = 'EUR';
   }
 
   const order_id = 'raro_' + Date.now();
@@ -16,8 +23,8 @@ module.exports = async function handler(req, res) {
     : 'Oplata zamovlennya';
 
   const params = {
-    amount: String(amount),
-    currency: String(currency),
+    amount: amountInMinorUnits,
+    currency: currencyCode,
     merchant_id: String(merchant_id),
     order_desc,
     order_id,
