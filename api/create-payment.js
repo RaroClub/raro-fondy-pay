@@ -17,7 +17,7 @@ export default async function handler(req, res) {
   // Currency fallback to UAH
   let currencyCode = String(currency || "");
   if (!currencyCode || currencyCode.includes("object") || currencyCode.length !== 3) {
-    currencyCode = "UAH";
+    currencyCode = "EUR";
   }
 
   const orderReference = "raro_" + Date.now();
