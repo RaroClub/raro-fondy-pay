@@ -1,61 +1,78 @@
-const crypto = require('crypto');
+import crypto from "crypto";
 
-module.exports = async function handler(req, res) {
-  const merchant_id = process.env.FONDY_MERCHANT_ID;
-  const secret_key = process.env.FONDY_SECRET_KEY;
+export default async function handler(req, res) {
+  const merchantAccount = process.env.WFP_MERCHANT_ACCOUNT;
+  const secretKey = process.env.WFP_SECRET_KEY;
+  const merchantDomain = process.env.WFP_DOMAIN || "raro-fondy-pay.vercel.app";
 
   const { amount, currency, order_name } = req.query;
 
   if (!amount) {
-    return res.status(400).send('Missing required parameter: amount');
+    return res.status(400).send("Missing required parameter: amount");
   }
 
-  const amountInMinorUnits = String(Math.round(parseFloat(amount) * 100));
+  // WayForPay uses main units (UAH), no need to multiply by 100
+  const amountValue = parseFloat(amount).toFixed(2);
 
-  let currencyCode = String(currency || '');
-  if (!currencyCode || currencyCode.includes('object') || currencyCode.length !== 3) {
-    currencyCode = 'EUR';
+  // Currency fallback to UAH
+  let currencyCode = String(currency || "");
+  if (!currencyCode || currencyCode.includes("object") || currencyCode.length !== 3) {
+    currencyCode = "UAH";
   }
 
-  const order_id = 'raro_' + Date.now();
-  const order_desc = order_name
-    ? 'Oplata zamovlennya ' + decodeURIComponent(order_name)
-    : 'Oplata zamovlennya';
+  const orderReference = "raro_" + Date.now();
+  const orderDate = Math.floor(Date.now() / 1000);
+  const productName = order_name
+    ? decodeURIComponent(order_name)
+    : "Oplata zamovlennya";
 
-  const params = {
-    amount: amountInMinorUnits,
-    currency: currencyCode,
-    merchant_id: String(merchant_id),
-    order_desc,
-    order_id,
-  };
+  // WayForPay signature: HMAC-MD5
+  // Format: merchantAccount;domain;orderReference;orderDate;amount;currency;productName[0];productCount[0];productPrice[0]
+  const signatureString = [
+    merchantAccount,
+    merchantDomain,
+    orderReference,
+    orderDate,
+    amountValue,
+    currencyCode,
+    productName,
+    1,
+    amountValue,
+  ].join(";");
 
-  const sortedKeys = Object.keys(params).sort();
-  const signatureString = secret_key + '|' + sortedKeys.map((k) => params[k]).join('|');
-  const signature = crypto.createHash('sha1').update(signatureString).digest('hex');
+  const signature = crypto
+    .createHmac("md5", secretKey)
+    .update(signatureString)
+    .digest("hex");
 
-  const requestBody = {
-    request: { ...params, signature },
-  };
+  // WayForPay requires HTML form POST — auto-submit on load
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Переадресація на оплату...</title>
+</head>
+<body style="font-family: Arial; padding: 20px;">
+  <h2>Переадресація на оплату...</h2>
+  <form id="wfp-form" method="post" action="https://secure.wayforpay.com/pay" accept-charset="utf-8">
+    <input type="hidden" name="merchantAccount" value="${merchantAccount}">
+    <input type="hidden" name="merchantAuthType" value="SimpleSignature">
+    <input type="hidden" name="merchantDomainName" value="${merchantDomain}">
+    <input type="hidden" name="merchantSignature" value="${signature}">
+    <input type="hidden" name="orderReference" value="${orderReference}">
+    <input type="hidden" name="orderDate" value="${orderDate}">
+    <input type="hidden" name="amount" value="${amountValue}">
+    <input type="hidden" name="currency" value="${currencyCode}">
+    <input type="hidden" name="productName[]" value="${productName}">
+    <input type="hidden" name="productPrice[]" value="${amountValue}">
+    <input type="hidden" name="productCount[]" value="1">
+    <input type="hidden" name="defaultPaymentSystem" value="card">
+    <input type="hidden" name="language" value="UA">
+  </form>
+  <script>document.getElementById('wfp-form').submit();</script>
+</body>
+</html>`;
 
-  try {
-    const fondyResponse = await fetch('https://pay.fondy.eu/api/checkout/url/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-    });
-
-    const fondyData = await fondyResponse.json();
-
-    if (fondyData.response && fondyData.response.checkout_url) {
-      return res.redirect(302, fondyData.response.checkout_url);
-    } else {
-      const errMsg = fondyData.response
-        ? fondyData.response.error_message || JSON.stringify(fondyData.response)
-        : 'Unknown Fondy error';
-      return res.status(500).send('Fondy error: ' + errMsg);
-    }
-  } catch (error) {
-    return res.status(500).send('Server error: ' + error.message);
-  }
-};
+  res.setHeader("Content-Type", "text/html");
+  return res.send(html);
+}
