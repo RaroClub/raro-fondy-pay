@@ -12,12 +12,12 @@
 <script>
 const params = new URLSearchParams(window.location.search);
 const amount = params.get('amount');
+const currency = params.get('currency');
 const order = params.get('order');
 
 if (amount) {
-  const paymentUrl = "https://pay.fondy.eu/s/EJhPf9lYAvFonl";
-
-  window.location.href = paymentUrl;
+  const apiUrl = `/api/create-payment?amount=${amount}&currency=${currency || 'UAH'}&order_name=${encodeURIComponent(order || '')}`;
+  window.location.href = apiUrl;
 } else {
   document.body.innerHTML = "<h2>Помилка: немає суми</h2>";
 }
